@@ -48,40 +48,60 @@ keytool -genkeypair -v -storetype JKS -keystore upload-keystore.jks -keyalg RSA 
 ```
 e aponte o `storeFile` do `key.properties` pra ela. Guarde o `.jks` **fora do repo** e as senhas num cofre. Perdeu o keystore de upload = processo de reset com o suporte da Play.
 
-### 4. Play Console
-1. Criar o app com o package do passo 2; ativar **Play App Signing**.
-2. Subir o **primeiro `.aab` manualmente** (a API não cria o app) — o `key.properties` já está pronto:
-   ```
-   storeFile=C:/Users/ramon/keys/erp/upload-keystore.jks
-   storePassword=...
-   keyAlias=upload
-   keyPassword=...
-   ```
+### 4. O que dá pra reaproveitar do app `mobile` — resumo antes de começar
+
+| Coisa | Reaproveita? | Por quê |
+|---|---|---|
+| Conta do Play Console (a pessoa/organização dona) | ✅ mesma conta, novo app dentro dela | Um app = um package name; a conta é a mesma |
+| Keystore de upload (`upload-keystore.jks`) | ✅ já feito (passo 3) | Mesmo arquivo, mesma senha |
+| Service account do Google Cloud | ✅ mesma service account, só dar acesso a mais um app | Uma service account pode publicar em vários apps do mesmo Console |
+| App no Play Console | ❌ novo, obrigatório | Package name diferente (`com.ramonmachadocarmo.logi`) = listing novo |
+| Secrets no GitHub (`ANDROID_*`, `PLAY_SERVICE_ACCOUNT_JSON`) | ⚠️ mesmos **valores**, mas precisam ser recadastrados | Secrets não atravessam repositórios — o repo do `mobile` e o do `logi-mobile` são independentes |
+
+### 5. Play Console — criar o app
+1. **play.google.com/console** → entre com a **mesma conta** já usada para o app `mobile`.
+2. **Criar app** → nome **"ERP Rotas"** (mesmo nome que já corrigi no `app_name`, o que aparece embaixo do ícone no celular — ver nota abaixo), idioma padrão pt-BR, tipo **App**, gratuito.
+3. Em **Configuração do app**, preencha o mínimo pedido (política de privacidade, público-alvo, etc. — os mesmos formulários que você já passou pro `mobile`, agora pra este app).
+4. **Integridade do app → Assinatura de apps** → ative **Play App Signing** (é por app; ativar de novo aqui, mesmo reaproveitando o keystore).
+5. Gere e suba o **primeiro `.aab` manualmente** (a API do passo 7 não cria o app, só publica em app já existente):
    ```bash
+   cd logi-mobile
    ./gradlew :mobile:bundleRelease -PapiBaseUrl=https://erp.personalia.cloud
    # saída: mobile/build/outputs/bundle/release/mobile-release.aab
    ```
-   (No Windows, se o `java` não estiver no PATH: `JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"`.)
-3. Contas pessoais criadas após nov/2023 precisam de teste fechado com 12 testadores por 14 dias antes da produção (igual ao app `mobile`).
+   (No Windows, se o `java` não estiver no PATH: `JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"`.) O `key.properties` já está pronto (passo 3), não precisa criar de novo.
+6. Suba esse `.aab` em **Teste → Teste interno → Criar release**, preencha as notas da versão e envie para revisão.
+7. Contas pessoais criadas após nov/2023 precisam de teste fechado com 12 testadores por 14 dias antes de liberar produção (igual ao app `mobile` — se já cumpriu isso lá, é a mesma conta de desenvolvedor, não recomeça).
 
-### 5. Service account (upload automático)
-Google Cloud → habilitar "Google Play Android Developer API" → criar service account e uma chave JSON → Play Console → Usuários e permissões → convidar o e-mail da service account com permissão de release **neste app**. (Pode reaproveitar a service account do app `mobile`, dando acesso também a este app.)
+> **Nome no Console × nome no aparelho:** são dois campos diferentes. O nome do passo 2 é só a *listagem* na loja — dá pra trocar depois. O nome embaixo do ícone no celular vem do `app_name` em `mobile/src/main/res/values/strings.xml`, que estava **"My Application"** (sobra do template, nunca tinha sido trocado) — já corrigi para **"ERP Rotas"**, mesmo nome sugerido pro Console, pra ficar consistente. Se quiser outro nome, troque nos dois lugares (esse arquivo + o Console) — o app `mobile` (Flutter) usa só **"ERP"**, então "ERP Rotas" segue essa mesma linha.
 
-### 6. GitHub (repo do logi-mobile)
-Settings → Environments → criar **`play-store`** (opcional: exigir aprovação manual antes do deploy) e cadastrar nele:
+### 6. Service account — reaproveitando a do `mobile`
+Antes de criar uma nova, ache a que já existe:
+1. No **Play Console**, abra o app já publicado (package `com.ramonmachadocarmo.erp`, o `mobile`) → **Configuração → Acesso à API**. A lista mostra a(s) service account(s) já vinculada(s) — anote o e-mail (algo como `nome@projeto.iam.gserviceaccount.com`).
+2. Volte pro app **novo** (logi-mobile) → **Configuração → Acesso à API** → **Vincular projeto do Google Cloud** (se ainda não estiver vinculado ao mesmo projeto do `mobile`) → na lista de service accounts do projeto, **convide a mesma conta** do passo 1 → dê permissão de **Release** (Gerenciar releases de produção/teste) só pra este app.
+3. Você **não precisa gerar uma chave JSON nova** — se ainda tiver o arquivo `.json` usado para o secret `PLAY_SERVICE_ACCOUNT_JSON` do repo `mobile` (ou o conteúdo salvo em algum cofre), é o mesmo conteúdo que vai pro secret deste repo, no passo 8.
+   - Se você **não guardou** esse JSON em lugar nenhum (só está como secret no GitHub, que não dá pra reler depois de salvo): Google Cloud Console → IAM e administrador → Contas de serviço → ache a mesma conta (pelo e-mail do passo 1) → aba **Chaves** → **Adicionar chave → Criar nova chave → JSON**. Isso gera uma chave *adicional* pra mesma conta (não invalida a antiga do `mobile`), então é seguro.
 
-| Tipo | Nome | Valor |
-|---|---|---|
-| Secret | `ANDROID_KEYSTORE_BASE64` | `base64 -w0 upload-keystore.jks` (mesmo `.jks` do app `mobile`, se você reaproveitou o keystore — mas precisa cadastrar de novo aqui: secrets não são compartilhados entre repositórios do GitHub) |
-| Secret | `ANDROID_KEYSTORE_PASSWORD` | senha do keystore |
-| Secret | `ANDROID_KEY_ALIAS` | `upload` |
-| Secret | `ANDROID_KEY_PASSWORD` | senha da chave |
-| Secret | `PLAY_SERVICE_ACCOUNT_JSON` | conteúdo do JSON da service account |
-| Variable | `API_BASE_URL` | `https://erp.personalia.cloud` (o app chama `/api/...` no gateway) |
+Só crie uma service account **nova** (Google Cloud → IAM e administrador → Contas de serviço → Criar conta de serviço, com o papel de acesso à Play Android Developer API) se preferir isolar os dois apps, ou se não achar a antiga.
+
+### 7. GitHub (repo do `logi-mobile`)
+1. No repositório do `logi-mobile` (já criado no passo 1) → **Settings → Environments → New environment** → nome **`play-store`** (opcional: marcar "Required reviewers" pra exigir aprovação manual antes do deploy, como no `mobile`).
+2. Dentro desse environment, **Add secret** (ou **Add variable** na última linha) um por um:
+
+| Tipo | Nome | Valor | De onde tirar |
+|---|---|---|---|
+| Secret | `ANDROID_KEYSTORE_BASE64` | saída de `base64 -w0 "C:/Users/ramon/keys/erp/upload-keystore.jks"` | mesmo `.jks` do `mobile` — gera de novo aqui, o valor em si é idêntico ao secret do repo `mobile` |
+| Secret | `ANDROID_KEYSTORE_PASSWORD` | a senha do keystore | igual ao secret do repo `mobile` |
+| Secret | `ANDROID_KEY_ALIAS` | `upload` | igual ao secret do repo `mobile` |
+| Secret | `ANDROID_KEY_PASSWORD` | a senha da chave | igual ao secret do repo `mobile` |
+| Secret | `PLAY_SERVICE_ACCOUNT_JSON` | conteúdo do arquivo `.json` (cole o arquivo inteiro) | o mesmo JSON do passo 6, ou a chave nova gerada lá |
+| Variable | `API_BASE_URL` | `https://erp.personalia.cloud` | fixo — não depende do `mobile` |
+
+   GitHub não deixa "copiar" um secret de um repo pro outro (nem pra você mesmo, depois de salvo) — é por isso que os quatro primeiros precisam ser digitados de novo aqui, mesmo sendo o mesmo valor de antes.
 
 O deploy **falha de propósito** se `API_BASE_URL` não existir ou não for `https://`, e se a tag não bater com o `VERSION_NAME` — para nunca publicar um app apontando para `localhost`.
 
-### 7. Perfil dos motoristas
+### 8. Perfil dos motoristas
 O app só libera quem tem, no Perfil (Configurador › Perfis), acesso a **`/logistica/rotas` e `/logistica/entrega`**. Confira antes de distribuir para a trilha internal.
 
 ## Como o app escolhe o servidor
