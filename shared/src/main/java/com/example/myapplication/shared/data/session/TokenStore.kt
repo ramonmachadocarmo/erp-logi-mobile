@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import org.json.JSONObject
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -34,6 +35,31 @@ class TokenStore(context: Context) {
 
     fun clear() {
         prefs.edit().remove(KEY_IV).remove(KEY_DATA).apply()
+    }
+
+    // Credenciais pra login por biometria — separadas do token e deliberadamente NAO removidas
+    // por [clear], igual mobile/lib/core/storage/session_store.dart: sair da conta nao deve
+    // desativar a digital, so [clearBiometricCredentials] (o botao "Desativar biometria") faz isso.
+    fun saveBiometricCredentials(email: String, password: String) {
+        val json = JSONObject().put("email", email).put("password", password).toString()
+        val (ivB64, cipherB64) = encrypt(json)
+        prefs.edit().putString(KEY_BIO_IV, ivB64).putString(KEY_BIO_DATA, cipherB64).apply()
+    }
+
+    fun readBiometricCredentials(): Pair<String, String>? {
+        val ivB64 = prefs.getString(KEY_BIO_IV, null) ?: return null
+        val cipherB64 = prefs.getString(KEY_BIO_DATA, null) ?: return null
+        val json = runCatching { decrypt(ivB64, cipherB64) }.getOrNull() ?: return null
+        return runCatching {
+            val obj = JSONObject(json)
+            obj.getString("email") to obj.getString("password")
+        }.getOrNull()
+    }
+
+    fun hasBiometricCredentials(): Boolean = prefs.contains(KEY_BIO_DATA)
+
+    fun clearBiometricCredentials() {
+        prefs.edit().remove(KEY_BIO_IV).remove(KEY_BIO_DATA).apply()
     }
 
     private fun secretKey(): SecretKey {
@@ -69,6 +95,8 @@ class TokenStore(context: Context) {
         private const val KEY_ALIAS = "logi_session_key"
         private const val KEY_IV = "iv"
         private const val KEY_DATA = "data"
+        private const val KEY_BIO_IV = "bio_iv"
+        private const val KEY_BIO_DATA = "bio_data"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
     }
 }

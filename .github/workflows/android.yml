@@ -88,10 +88,15 @@ jobs:
       - name: Build do app bundle (:mobile, release assinado)
         run: ./gradlew :mobile:bundleRelease -PapiBaseUrl=${{ vars.API_BASE_URL }}
 
+      # `track` (singular) e' um input depreciado da action — o log ja mostrou o aviso pra migrar.
+      # Ficou nesse caminho de codigo mais velho quando o "Committing the Edit" falhou com "The
+      # service is currently unavailable" mesmo apos o Google ja ter aplicado a mudanca de verdade
+      # (visivel no Play Console) — nao confirmado como a causa, mas e' o unico sinal concreto que
+      # apareceu no log, e `tracks` (plural) e' o caminho recomendado hoje pela action.
       - uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: ${{ env.PACKAGE_NAME }}
           releaseFiles: mobile/build/outputs/bundle/release/mobile-release.aab
-          track: ${{ inputs.track || 'internal' }}
+          tracks: ${{ inputs.track || 'internal' }}
           status: completed

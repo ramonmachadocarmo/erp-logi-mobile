@@ -1,7 +1,6 @@
 package com.example.myapplication
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +18,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -31,18 +31,22 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.example.myapplication.shared.AppContainer
 import com.example.myapplication.shared.domain.model.RoutePlan
@@ -51,8 +55,12 @@ import com.example.myapplication.shared.domain.model.Vehicle
 import com.example.myapplication.shared.presentation.RouteFlowController
 import com.example.myapplication.shared.presentation.RouteUiState
 import com.example.myapplication.ui.theme.MyApplicationTheme
+import kotlinx.coroutines.launch
 
-class MainActivity : ComponentActivity() {
+// FragmentActivity (não ComponentActivity puro) porque BiometricPrompt precisa de uma
+// FragmentActivity/Fragment pra se hospedar — Compose funciona igual nas duas, FragmentActivity só
+// estende ComponentActivity.
+class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,7 +76,7 @@ class MainActivity : ComponentActivity() {
             }
 
             MyApplicationTheme {
-                RoutePlannerApp(state = state, controller = controller)
+                RoutePlannerApp(state = state, container = container, controller = controller)
             }
         }
     }
@@ -76,7 +84,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RoutePlannerApp(state: RouteUiState, controller: RouteFlowController) {
+fun RoutePlannerApp(state: RouteUiState, container: AppContainer, controller: RouteFlowController) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -91,7 +99,7 @@ fun RoutePlannerApp(state: RouteUiState, controller: RouteFlowController) {
         ) {
             when (state) {
                 is RouteUiState.Restoring -> LoadingView()
-                is RouteUiState.LoginRequired -> LoginView(state, onSubmit = controller::login)
+                is RouteUiState.LoginRequired -> LoginView(state, container = container, controller = controller)
                 is RouteUiState.NoAccess -> NoAccessView(state.userName, onLogout = controller::logout)
                 is RouteUiState.VehiclePicker -> VehiclePickerView(state, onSelect = controller::selectVehicle, onLogout = controller::logout)
                 is RouteUiState.NoRouteToday -> NoRouteView(state, onRefresh = controller::refresh, onChangeVehicle = controller::changeVehicle)
@@ -122,9 +130,50 @@ fun ErrorView(message: String) {
 }
 
 @Composable
-fun LoginView(state: RouteUiState.LoginRequired, onSubmit: (String, String) -> Unit) {
+fun LoginView(state: RouteUiState.LoginRequired, container: AppContainer, controller: RouteFlowController) {
+    val activity = LocalContext.current as FragmentActivity
+    val scope = rememberCoroutineScope()
+
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    // Aparelho tem biometria com pelo menos um dedo/rosto cadastrado.
+    var bioAvailable by remember { mutableStateOf(false) }
+    // Ja existe email/senha guardados — a digital pode entrar sozinha.
+    var bioEnabled by remember { mutableStateOf(false) }
+    // Checkbox "lembrar neste aparelho", so aparece pra quem ainda nao ativou.
+    var rememberBio by remember { mutableStateOf(true) }
+
+    fun signInWithBiometrics() {
+        val saved = container.biometricCredentialsUseCase()
+        if (saved == null) {
+            bioEnabled = false
+            return
+        }
+        scope.launch {
+            val ok = container.biometricService.authenticate(activity, "Confirme sua identidade para entrar")
+            if (!ok) return@launch
+            controller.loginWithCredentials(
+                saved.email,
+                saved.password,
+                onInvalidCredentials = {
+                    // Senha trocada/revogada no ERP desde que foi guardada — a digital nao serve mais.
+                    container.clearBiometricCredentialsUseCase()
+                    bioEnabled = false
+                },
+            )
+        }
+    }
+
+    // So roda uma vez (chave fixa "Unit"), igual ao _initBiometrics() do app mobile: checa o
+    // aparelho e, se ja tiver credencial guardada, oferece a digital na hora — sem precisar tocar
+    // em nada, como o fluxo de app de banco.
+    LaunchedEffect(Unit) {
+        val available = container.biometricService.isAvailable(activity)
+        val saved = available && container.hasBiometricCredentialsUseCase()
+        bioAvailable = available
+        bioEnabled = saved
+        if (saved) signInWithBiometrics()
+    }
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
         Text(text = "Entrar", fontSize = 24.sp, fontWeight = FontWeight.Bold)
@@ -153,17 +202,49 @@ fun LoginView(state: RouteUiState.LoginRequired, onSubmit: (String, String) -> U
             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Password),
             singleLine = true,
         )
+        if (bioAvailable && !bioEnabled) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                Checkbox(checked = rememberBio, onCheckedChange = { rememberBio = it })
+                Text("Entrar com biometria neste aparelho", fontSize = 14.sp)
+            }
+        }
         state.error?.let { error ->
             Spacer(modifier = Modifier.height(8.dp))
             Text(text = error, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
         }
         Spacer(modifier = Modifier.height(20.dp))
         Button(
-            onClick = { onSubmit(email.trim(), password) },
+            onClick = {
+                val emailTrimmed = email.trim()
+                val remember = bioAvailable && !bioEnabled && rememberBio
+                controller.loginWithCredentials(
+                    emailTrimmed,
+                    password,
+                    onSuccess = { if (remember) container.saveBiometricCredentialsUseCase(emailTrimmed, password) },
+                )
+            },
             modifier = Modifier.fillMaxWidth(),
             enabled = !state.busy && email.isNotBlank() && password.isNotBlank(),
         ) {
             Text(text = if (state.busy) "Entrando..." else "Entrar")
+        }
+        if (bioEnabled) {
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = { signInWithBiometrics() },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !state.busy,
+            ) {
+                Text("👆 Entrar com biometria")
+            }
+            TextButton(
+                onClick = {
+                    container.clearBiometricCredentialsUseCase()
+                    bioEnabled = false
+                },
+            ) {
+                Text("Desativar biometria")
+            }
         }
     }
 }

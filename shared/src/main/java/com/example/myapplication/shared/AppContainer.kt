@@ -1,6 +1,7 @@
 package com.example.myapplication.shared
 
 import android.content.Context
+import com.example.myapplication.shared.data.biometric.BiometricService
 import com.example.myapplication.shared.data.cache.FileOfflineCache
 import com.example.myapplication.shared.data.cache.FilePendingActionQueue
 import com.example.myapplication.shared.data.remote.ApiClient
@@ -16,14 +17,18 @@ import com.example.myapplication.shared.data.sync.WorkManagerSyncScheduler
 import com.example.myapplication.shared.domain.repository.AuthRepository
 import com.example.myapplication.shared.domain.repository.ConfigRepository
 import com.example.myapplication.shared.domain.repository.RouteRepository
+import com.example.myapplication.shared.domain.usecase.BiometricCredentialsUseCase
+import com.example.myapplication.shared.domain.usecase.ClearBiometricCredentialsUseCase
 import com.example.myapplication.shared.domain.usecase.ConfirmArrivalUseCase
 import com.example.myapplication.shared.domain.usecase.FailDeliveryUseCase
+import com.example.myapplication.shared.domain.usecase.HasBiometricCredentialsUseCase
 import com.example.myapplication.shared.domain.usecase.ListVehiclesUseCase
 import com.example.myapplication.shared.domain.usecase.LoadTodaysRouteUseCase
 import com.example.myapplication.shared.domain.usecase.LoginUseCase
 import com.example.myapplication.shared.domain.usecase.LogoutUseCase
 import com.example.myapplication.shared.domain.usecase.RefreshRouteUseCase
 import com.example.myapplication.shared.domain.usecase.RestoreSessionUseCase
+import com.example.myapplication.shared.domain.usecase.SaveBiometricCredentialsUseCase
 import com.example.myapplication.shared.domain.usecase.SelectRouteOptionUseCase
 import java.io.File
 
@@ -75,9 +80,17 @@ class AppContainer(context: Context) {
     /** Used by the background worker; talks to the server directly (a failure must not re-queue). */
     val pendingActionSyncer = PendingActionSyncer(pendingActionQueue, remoteRouteRepository)
 
+    // BiometricPrompt precisa de uma FragmentActivity viva por chamada — por isso o service fica
+    // sem estado aqui (so metodos), a Activity de verdade vem de quem chama (so a tela do celular).
+    val biometricService = BiometricService()
+
     val restoreSessionUseCase = RestoreSessionUseCase(authRepository)
     val loginUseCase = LoginUseCase(authRepository)
     val logoutUseCase = LogoutUseCase(authRepository, onLoggedOut = offlineCache::clear)
+    val hasBiometricCredentialsUseCase = HasBiometricCredentialsUseCase(authRepository)
+    val biometricCredentialsUseCase = BiometricCredentialsUseCase(authRepository)
+    val saveBiometricCredentialsUseCase = SaveBiometricCredentialsUseCase(authRepository)
+    val clearBiometricCredentialsUseCase = ClearBiometricCredentialsUseCase(authRepository)
     val listVehiclesUseCase = ListVehiclesUseCase(configRepository)
     val loadTodaysRouteUseCase = LoadTodaysRouteUseCase(routeRepository)
     val refreshRouteUseCase = RefreshRouteUseCase(routeRepository)

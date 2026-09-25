@@ -62,6 +62,8 @@ dependencies {
     implementation(project(":shared"))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.app.projected)
+    // FragmentActivity, so MainActivity can host androidx.biometric's BiometricPrompt.
+    implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)

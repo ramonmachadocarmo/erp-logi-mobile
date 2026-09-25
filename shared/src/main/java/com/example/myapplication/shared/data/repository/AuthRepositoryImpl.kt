@@ -3,6 +3,7 @@ package com.example.myapplication.shared.data.repository
 import com.example.myapplication.shared.data.remote.ApiClient
 import com.example.myapplication.shared.data.remote.ApiException
 import com.example.myapplication.shared.data.session.TokenStore
+import com.example.myapplication.shared.domain.model.BiometricCredentials
 import com.example.myapplication.shared.domain.model.Session
 import com.example.myapplication.shared.domain.repository.AuthRepository
 import org.json.JSONObject
@@ -62,10 +63,23 @@ class AuthRepositoryImpl(
         session
     }
 
+    override fun isInvalidCredentials(error: Throwable): Boolean =
+        error is ApiException && error.statusCode == 401
+
     override fun logout() {
         tokenStore.clear()
         cached = null
     }
+
+    override fun hasBiometricCredentials(): Boolean = tokenStore.hasBiometricCredentials()
+
+    override fun biometricCredentials(): BiometricCredentials? =
+        tokenStore.readBiometricCredentials()?.let { (email, password) -> BiometricCredentials(email, password) }
+
+    override fun saveBiometricCredentials(email: String, password: String) =
+        tokenStore.saveBiometricCredentials(email, password)
+
+    override fun clearBiometricCredentials() = tokenStore.clearBiometricCredentials()
 
     private fun persist(session: Session) {
         val json = JSONObject()

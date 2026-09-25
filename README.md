@@ -33,6 +33,13 @@ It uses **Clean Architecture** and **SOLID** design principles, backed by the ER
   credentials on the car template widgets is both awkward and a driver-safety concern — so the
   car screen just reads the session the phone already established (shared `TokenStore`,
   AES-GCM/Android-Keystore-encrypted, no plaintext token on disk).
+* **Biometric sign-in** (fingerprint/face, `androidx.biometric`, BIOMETRIC_STRONG only — a
+  screen-lock PIN doesn't count): after a password login, the driver can save email+password
+  encrypted on-device; next launch offers the fingerprint automatically (same UX as
+  `mobile/lib/core/biometric/biometric_service.dart`). The prompt never talks to the backend by
+  itself — success just unlocks the stored password, which still goes through the real
+  `/auth/login` call. A rejected password (changed/revoked) clears the stored credentials
+  automatically; logging out does not.
 
 ### 🚚 2. Real delivery plans, not a local JSON file
 * Driver picks their vehicle (from `config-service`'s `/vehicles`); the app loads that vehicle's

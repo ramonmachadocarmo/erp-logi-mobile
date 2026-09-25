@@ -39,12 +39,32 @@ class RouteFlowController(
         onAuthenticated(session.userName, session.hasRouteAndDeliveryAccess())
     }
 
-    fun login(email: String, password: String) {
+    fun login(email: String, password: String) = loginWithCredentials(email, password)
+
+    /**
+     * Same outcome as [login], but with two extra hooks the login screen's biometric flow needs
+     * and this controller (and [RouteUiState]) otherwise has no reason to know about: [onSuccess]
+     * (worth remembering these credentials?) and [onInvalidCredentials] (a rejected password —
+     * 401 — means previously-remembered credentials are stale and worth forgetting; any other
+     * failure, network down included, does not).
+     */
+    fun loginWithCredentials(
+        email: String,
+        password: String,
+        onSuccess: () -> Unit = {},
+        onInvalidCredentials: () -> Unit = {},
+    ) {
         state = RouteUiState.LoginRequired(busy = true)
         scope.launch {
             container.loginUseCase(email, password).fold(
-                onSuccess = { session -> onAuthenticated(session.userName, session.hasRouteAndDeliveryAccess()) },
-                onFailure = { err -> state = RouteUiState.LoginRequired(error = err.message ?: "Falha no login") },
+                onSuccess = { session ->
+                    onSuccess()
+                    onAuthenticated(session.userName, session.hasRouteAndDeliveryAccess())
+                },
+                onFailure = { err ->
+                    if (container.loginUseCase.isInvalidCredentials(err)) onInvalidCredentials()
+                    state = RouteUiState.LoginRequired(error = err.message ?: "Falha no login")
+                },
             )
         }
     }
