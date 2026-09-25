@@ -26,6 +26,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Garante o bit de execucao independente do que estiver rastreado no Git — em Windows com
+      # core.fileMode=false (comum), o gradlew pode ser commitado sem +x mesmo estando executavel
+      # no disco local, e o checkout no Linux ai falha com "Permission denied" (exit 126).
+      - run: chmod +x gradlew
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -45,6 +49,7 @@ jobs:
     environment: play-store        # no GitHub: pode exigir aprovacao manual antes de publicar
     steps:
       - uses: actions/checkout@v4
+      - run: chmod +x gradlew
 
       - name: Conferir tag x version.properties e API_BASE_URL
         env:
