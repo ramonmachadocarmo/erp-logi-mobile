@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Somente DEBUG: permite HTTP puro pro gateway local (emulador 10.0.2.2 / IP da LAN), que o Android
+     bloqueia por padrao com targetSdk 37. O build de release nao tem este arquivo — so HTTPS. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
