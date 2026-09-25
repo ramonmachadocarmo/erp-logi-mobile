@@ -30,7 +30,10 @@ jobs:
         with:
           distribution: temurin
           java-version: 25          # mesmo da toolchain do projeto (gradle-daemon-jvm.properties)
-      - uses: android-actions/setup-android@v3   # aceita as licencas; o AGP baixa a platform 37 sozinho
+      # Sem android-actions/setup-android: o runner ubuntu-latest ja vem com um SDK Android
+      # instalado (ANDROID_HOME) e licencas aceitas — o AGP baixa sozinho qualquer platform/
+      # build-tools que faltar durante o build. A action tentava reinstalar o pacote legado
+      # "tools" (removido pelo Google ha anos) e quebrava com "Failed to find package 'tools'".
       - uses: gradle/actions/setup-gradle@v4
       - name: Testes unitarios + build debug
         run: ./gradlew test assembleDebug
@@ -60,7 +63,6 @@ jobs:
         with:
           distribution: temurin
           java-version: 25
-      - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Keystore de assinatura
