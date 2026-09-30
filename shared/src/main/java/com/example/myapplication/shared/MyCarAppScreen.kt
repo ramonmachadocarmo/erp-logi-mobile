@@ -55,7 +55,7 @@ class MyCarAppScreen(carContext: CarContext) : Screen(carContext) {
         else -> null
     }
 
-    override fun onGetTemplate(): Template =
+    override fun onGetTemplate(): Template = try {
         when (val state = controller.state) {
             is RouteUiState.Restoring -> messageTemplate("Carregando...")
             is RouteUiState.LoginRequired -> loginRequiredTemplate()
@@ -67,6 +67,9 @@ class MyCarAppScreen(carContext: CarContext) : Screen(carContext) {
             is RouteUiState.RouteCompleted -> completedTemplate(state)
             is RouteUiState.Error -> messageTemplate(state.message)
         }
+    } catch (e: Exception) {
+        messageTemplate("Erro ao exibir tela: ${e.message}")
+    }
 
     private fun messageTemplate(text: String): MessageTemplate =
         MessageTemplate.Builder(text)
@@ -100,7 +103,7 @@ class MyCarAppScreen(carContext: CarContext) : Screen(carContext) {
                 .build()
         }
         val items = ItemList.Builder()
-        state.vehicles.forEach { vehicle ->
+        state.vehicles.take(MAX_LIST_ITEMS).forEach { vehicle ->
             items.addItem(
                 Row.Builder()
                     .setTitle(vehicle.label)
@@ -117,7 +120,7 @@ class MyCarAppScreen(carContext: CarContext) : Screen(carContext) {
 
     private fun noRouteTemplate(state: RouteUiState.NoRouteToday): MessageTemplate =
         MessageTemplate.Builder("Nenhuma rota planejada hoje para ${state.vehicle.label}.")
-            .setHeaderAction(Action.BACK)
+            .setHeaderAction(Action.APP_ICON)
             .setTitle("Rota")
             .addAction(
                 Action.Builder()
@@ -125,11 +128,17 @@ class MyCarAppScreen(carContext: CarContext) : Screen(carContext) {
                     .setOnClickListener { controller.refresh() }
                     .build(),
             )
+            .addAction(
+                Action.Builder()
+                    .setTitle("Mudar veículo")
+                    .setOnClickListener { controller.changeVehicle() }
+                    .build(),
+            )
             .build()
 
     private fun routeOptionsTemplate(state: RouteUiState.RouteOptions): ListTemplate {
         val items = ItemList.Builder()
-        state.plan.options.forEach { option ->
+        state.plan.options.take(MAX_LIST_ITEMS).forEach { option ->
             items.addItem(
                 Row.Builder()
                     .setTitle(option.label)
@@ -140,8 +149,18 @@ class MyCarAppScreen(carContext: CarContext) : Screen(carContext) {
         }
         return ListTemplate.Builder()
             .setTitle("Escolha a rota • ${state.vehicle.label}")
-            .setHeaderAction(Action.BACK)
+            .setHeaderAction(Action.APP_ICON)
             .setSingleList(items.build())
+            .setActionStrip(
+                ActionStrip.Builder()
+                    .addAction(
+                        Action.Builder()
+                            .setTitle("Mudar veículo")
+                            .setOnClickListener { controller.changeVehicle() }
+                            .build(),
+                    )
+                    .build(),
+            )
             .build()
     }
 
@@ -150,7 +169,8 @@ class MyCarAppScreen(carContext: CarContext) : Screen(carContext) {
         val items = ItemList.Builder()
         val current = plan.stops.firstOrNull()
 
-        plan.stops.forEachIndexed { index, stop ->
+        // PlaceListMapTemplate caps at MAX_LIST_ITEMS rows; show closest stops first.
+        plan.stops.take(MAX_LIST_ITEMS).forEachIndexed { index, stop ->
             val place = Place.Builder(CarLocation.create(stop.lat, stop.lng)).build()
             val status = if (index == 0) "🎯 [Toque para confirmar chegada]" else "⏳ [A caminho]"
             val rowBuilder = Row.Builder()
@@ -179,15 +199,17 @@ class MyCarAppScreen(carContext: CarContext) : Screen(carContext) {
             )
         }
 
+        val hiddenStops = (plan.stops.size - MAX_LIST_ITEMS).coerceAtLeast(0)
         val title = if (current != null) {
-            "${current.customerName} (${plan.totalTimeMinutes} min restantes)"
+            "${current.customerName} (${plan.totalTimeMinutes} min restantes)" +
+                if (hiddenStops > 0) " • +$hiddenStops paradas" else ""
         } else {
             "${plan.vehicleName} (${plan.totalTimeMinutes} min • ${"%.1f".format(plan.totalDistanceKm)} km)"
         }
 
         val templateBuilder = PlaceListMapTemplate.Builder()
             .setTitle(title)
-            .setHeaderAction(Action.BACK)
+            .setHeaderAction(Action.APP_ICON)
             .setActionStrip(actionStripBuilder.build())
             .setItemList(items.build())
 
@@ -210,6 +232,8 @@ class MyCarAppScreen(carContext: CarContext) : Screen(carContext) {
             .build()
 
     companion object {
+        // PlaceListMapTemplate and ListTemplate enforce a hard cap of 6 rows in Car App Library 1.4.
+        private const val MAX_LIST_ITEMS = 6
         val colorLightGreen: CarColor = CarColor.createCustom(0xFF81C784.toInt(), 0xFF388E3C.toInt())
         val colorOrange: CarColor = CarColor.createCustom(0xFFFF9800.toInt(), 0xFFE65100.toInt())
     }

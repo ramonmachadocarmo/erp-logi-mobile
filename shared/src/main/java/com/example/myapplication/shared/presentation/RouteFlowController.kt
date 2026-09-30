@@ -31,12 +31,20 @@ class RouteFlowController(
     }
 
     private suspend fun restore() {
-        val session = container.restoreSessionUseCase().getOrNull()
-        if (session == null) {
+        // Use cached session immediately so the car screen never freezes waiting for a network call.
+        val cached = container.restoreSessionUseCase.cached()
+        if (cached == null) {
             state = RouteUiState.LoginRequired()
             return
         }
-        onAuthenticated(session.userName, session.hasRouteAndDeliveryAccess())
+        // Background validation: a definitive 401 forces re-login; transient network failures don't.
+        scope.launch {
+            val result = container.restoreSessionUseCase()
+            if (result.isSuccess && result.getOrNull() == null) {
+                state = RouteUiState.LoginRequired()
+            }
+        }
+        onAuthenticated(cached.userName, cached.hasRouteAndDeliveryAccess())
     }
 
     fun login(email: String, password: String) = loginWithCredentials(email, password)

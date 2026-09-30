@@ -61,7 +61,8 @@ class RouteRepositoryImpl(
     /** [rawPlan] is a full sales-service DeliveryPlan JSON (from either list or get). */
     private suspend fun buildPlan(rawPlan: JSONObject): RoutePlan {
         val customerNames = configRepository.customerNames().getOrElse { emptyMap() }
-        val deliveredOrderIds = deliveredOrderIds()
+        // Guard against API errors: a failed sales-orders call should not block route display.
+        val deliveredOrderIds = runCatching { deliveredOrderIds() }.getOrElse { emptySet() }
         return planFrom(rawPlan, customerNames, deliveredOrderIds)
     }
 
