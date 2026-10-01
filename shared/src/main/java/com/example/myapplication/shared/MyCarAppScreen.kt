@@ -1,11 +1,15 @@
 package com.example.myapplication.shared
 
+import android.text.SpannableString
+import android.text.Spanned
 import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
 import androidx.car.app.model.CarColor
 import androidx.car.app.model.CarLocation
+import androidx.car.app.model.Distance
+import androidx.car.app.model.DistanceSpan
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.ListTemplate
 import androidx.car.app.model.MessageTemplate
@@ -173,9 +177,19 @@ class MyCarAppScreen(carContext: CarContext) : Screen(carContext) {
         plan.stops.take(MAX_LIST_ITEMS).forEachIndexed { index, stop ->
             val place = Place.Builder(CarLocation.create(stop.lat, stop.lng)).build()
             val status = if (index == 0) "🎯 [Toque para confirmar chegada]" else "⏳ [A caminho]"
+
+            // PlaceListMapTemplate requires a DistanceSpan on every non-browsable row.
+            val addressStr = stop.address.formatted().ifEmpty { " " }
+            val distText = SpannableString(addressStr)
+            distText.setSpan(
+                DistanceSpan.create(Distance.create(stop.distanceM / 1000.0, Distance.UNIT_KILOMETERS)),
+                0, distText.length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+
             val rowBuilder = Row.Builder()
                 .setTitle("${index + 1}. ${stop.customerName} $status")
-                .addText(stop.address.formatted())
+                .addText(distText)
                 .setMetadata(Metadata.Builder().setPlace(place).build())
             if (index == 0) {
                 rowBuilder.setOnClickListener { controller.confirmArrival() }
