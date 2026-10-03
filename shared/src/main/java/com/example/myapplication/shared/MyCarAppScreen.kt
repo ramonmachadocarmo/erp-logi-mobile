@@ -1,5 +1,7 @@
 package com.example.myapplication.shared
 
+import android.content.Intent
+import android.net.Uri
 import android.text.SpannableString
 import android.text.Spanned
 import androidx.car.app.CarContext
@@ -176,7 +178,7 @@ class MyCarAppScreen(carContext: CarContext) : Screen(carContext) {
         // PlaceListMapTemplate caps at MAX_LIST_ITEMS rows; show closest stops first.
         plan.stops.take(MAX_LIST_ITEMS).forEachIndexed { index, stop ->
             val place = Place.Builder(CarLocation.create(stop.lat, stop.lng)).build()
-            val status = if (index == 0) "🎯 [Toque para confirmar chegada]" else "⏳ [A caminho]"
+            val status = if (index == 0) "🗺️ [Toque para navegar]" else "⏳ [A caminho]"
 
             // PlaceListMapTemplate requires a DistanceSpan on every non-browsable row.
             val addressStr = stop.address.formatted().ifEmpty { " " }
@@ -192,7 +194,15 @@ class MyCarAppScreen(carContext: CarContext) : Screen(carContext) {
                 .addText(distText)
                 .setMetadata(Metadata.Builder().setPlace(place).build())
             if (index == 0) {
-                rowBuilder.setOnClickListener { controller.confirmArrival() }
+                // Tap launches the car's navigation app (Google Maps, Waze, etc.) via the AA host.
+                rowBuilder.setOnClickListener {
+                    try {
+                        carContext.startCarApp(
+                            Intent(CarContext.ACTION_NAVIGATE,
+                                   Uri.parse("geo:${stop.lat},${stop.lng}?q=${stop.lat},${stop.lng}")),
+                        )
+                    } catch (_: Exception) { /* navigation app not available — no-op */ }
+                }
             }
             items.addItem(rowBuilder.build())
         }
